@@ -1,7 +1,8 @@
 # Ollama Cloud 사용 가이드
 
 이 머신(CPU-only, GPU 없음)은 **클라우드 전용**으로 구성돼 있습니다.
-아래 내용은 모두 실제 API를 호출해 검증한 결과입니다 (검증일: 2026-08-02).
+아래 내용은 모두 실제 API를 호출해 검증한 결과입니다
+(검증일: 2026-08-02, 모델 목록 재확인: 2026-08-03).
 
 ---
 
@@ -34,28 +35,51 @@ CLI 없이 HTTP API만 쓸 거라면 불필요합니다.
 
 ---
 
-## 2. 무료 티어에서 쓸 수 있는 모델
+## 2. 모델 목록 — 무료 / 유료
 
-전체 18개 중 **7개**만 접근 가능합니다. 나머지는
-`this model requires a subscription` 오류가 납니다.
+전체 18개 중 **무료 7개, 구독 필요 11개**입니다.
+유료 모델을 호출하면 `HTTP 403 — this model requires a subscription` 이 납니다.
 
-| 모델 | 무료 |
-|---|:--:|
-| `gemma4:31b` | ✅ |
-| `gpt-oss:120b` | ✅ |
-| `gpt-oss:20b` | ✅ |
-| `minimax-m3` | ✅ |
-| `nemotron-3-nano:30b` | ✅ |
-| `nemotron-3-super` | ✅ |
-| `nemotron-3-ultra` | ✅ |
-| `deepseek-v4-pro` / `-flash` / `-flash:0731` | ❌ 구독 |
-| `glm-5.1` / `glm-5.2` | ❌ 구독 |
-| `kimi-k3` / `k2.7-code` / `k2.6` | ❌ 구독 |
-| `minimax-m2.7` | ❌ 구독 |
-| `mistral-large-3:675b` | ❌ 구독 |
-| `qwen3.5:397b` | ❌ 구독 |
+스펙은 `/api/show` 로 조회한 값이며, 접근 가능 여부는 각 모델에
+실제 요청을 보내 확인했습니다.
 
-### `gemma4:31b` 스펙 (`/api/show`)
+### ✅ 무료 (7개)
+
+| 모델 | 파라미터 | 컨텍스트 | 기능 |
+|---|---:|---:|---|
+| `nemotron-3-ultra` | 550B | 262K | thinking, tools |
+| `gpt-oss:120b` | 117B | 131K | thinking, tools |
+| `nemotron-3-super` | 120B | 262K | thinking, tools |
+| `minimax-m3` | — | **524K** | thinking, tools, **vision** |
+| `gemma4:31b` | 32.7B | 262K | thinking, tools, **vision** |
+| `nemotron-3-nano:30b` | 32B | 262K | thinking, tools |
+| `gpt-oss:20b` | 20.9B | 131K | thinking, tools |
+
+### 💳 구독 필요 (11개)
+
+| 모델 | 파라미터 | 컨텍스트 | 기능 |
+|---|---:|---:|---|
+| `kimi-k3` | 2.81T | **1.05M** | thinking, tools, vision |
+| `deepseek-v4-pro` | 1.6T | 524K | thinking, tools |
+| `kimi-k2.6` | 1.04T | 262K | thinking, tools, vision |
+| `kimi-k2.7-code` | 1.04T | 262K | thinking, tools, vision |
+| `glm-5.2` | 756B | **1.0M** | thinking, tools |
+| `glm-5.1` | 756B | 203K | thinking, tools |
+| `mistral-large-3:675b` | 675B | 262K | tools, vision |
+| `qwen3.5:397b` | 397B | 262K | thinking, tools, vision |
+| `deepseek-v4-flash:0731` | 304B | **1.05M** | thinking, tools |
+| `minimax-m2.7` | 229B | 197K | thinking, tools |
+| `deepseek-v4-flash` | 158B | **1.05M** | thinking, tools |
+
+### 고르는 기준
+
+- **무료 최대 성능** — `nemotron-3-ultra` (550B)
+- **무료 최대 컨텍스트** — `minimax-m3` (524K)
+- **무료 vision** — `minimax-m3`, `gemma4:31b` 2개뿐
+- **thinking / tools** — 무료·유료 구분 없이 전 모델 지원
+- 100만 토큰급 컨텍스트(`kimi-k3`, `glm-5.2`, `deepseek-v4-flash` 계열)는 전부 유료
+
+### `gemma4:31b` 상세 (`/api/show`)
 
 ```
 capabilities   : completion, thinking, tools, vision
