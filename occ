@@ -1,0 +1,68 @@
+#!/usr/bin/env bash
+# occ — Ollama Cloud 셸 래퍼
+#
+#   occ "한국의 수도는?"          프롬프트 (스트리밍)
+#   occ -m kimi-k3 "안녕"         모델 지정
+#   occ -j "홍길동은 30살"        JSON 출력 유도
+#   occ ls                        모델 목록
+#   occ show gemma4:31b           모델 스펙
+set -euo pipefail
+
+BASE="https://ollama.com"
+MODEL="${OCC_MODEL:-gemma4:31b}"
+JSON_MODE=0
+
+if [ -z "${OLLAMA_API_KEY:-}" ]; then
+  if [ -r "$HOME/.secrets/OLLAMA_API_KEY" ]; then
+    OLLAMA_API_KEY="$(cat "$HOME/.secrets/OLLAMA_API_KEY")"
+  else
+    echo "OLLAMA_API_KEY가 없습니다. ~/.secrets/OLLAMA_API_KEY 를 확인하세요." >&2
+    exit 1
+  fi
+fi
+AUTH="Authorization: Bearer $OLLAMA_API_KEY"
+
+api() { curl -sS --max-time 180 -H "$AUTH" -H "Content-Type: application/json" "$@"; }
+
+case "${1:-}" in
+  ls)
+    api "$BASE/api/tags" | jq -r '.models[].name' | sort
+    exit 0 ;;
+  show)
+    api "$BASE/api/show" -d "$(jq -nc --arg m "${2:-$MODEL}" '{model:$m}')" \
+      | jq '{capabilities, details, context_length: (.model_info | to_entries
+             | map(select(.key|test("context_length"))) | from_entries)}'
+    exit 0 ;;
+esac
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -m) MODEL="$2"; shift 2 ;;
+    -j) JSON_MODE=1; shift ;;
+    -h|--help) sed -n '2,10p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    *) break ;;
+  esac
+done
+
+[ $# -gt 0 ] || { echo "프롬프트가 필요합니다. -h 로 사용법 확인." >&2; exit 1; }
+
+PROMPT="$*"
+# 서버가 JSON Schema 강제를 무시하므로, 프롬프트로 지시한다 (README 참고)
+[ "$JSON_MODE" = 1 ] && PROMPT="$PROMPT
+
+설명 없이 유효한 JSON만 출력해."
+
+stream_chat() {
+  api "$BASE/api/chat" -N -d "$(jq -nc --arg m "$MODEL" --arg p "$PROMPT" \
+    '{model:$m, messages:[{role:"user", content:$p}], stream:true}')" \
+    | jq -j --unbuffered 'if .error then "에러: \(.error)\n" else (.message.content // "") end'
+}
+
+if [ "$JSON_MODE" = 1 ]; then
+  # 코드펜스를 벗기고 JSON만 남긴다
+  stream_chat | sed -e '/^[[:space:]]*```/d' | jq . 2>/dev/null \
+    || { echo "JSON 파싱 실패 — 원문:" >&2; stream_chat; echo; }
+else
+  stream_chat
+  echo
+fi

@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# 시크릿 — API 키는 절대 커밋하지 않는다 (~/.secrets/OLLAMA_API_KEY 사용)
+.env
+.env.*
+*.key
+secrets/
+.secrets/
+
+# 에디터 / OS
+.vscode/
+.idea/
+.DS_Store
+*.swp
+
+# 작업 파일
+*.log
+tmp/
