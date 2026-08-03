@@ -371,7 +371,12 @@ Model    : gemma4:31b / gpt-oss:120b / minimax-m3 ...
 
 ## 10. 라이선스
 
-[Apache License 2.0](LICENSE) — Copyright 2026 zeta4lab
+[Apache License 2.0](LICENSE)
+
+Copyright 2026 **제타포랩(zeta4lab)**
+
+- 대표: 최강유
+- https://zeta4.net
 
 ---
 

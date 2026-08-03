@@ -1,4 +1,4 @@
-# Copyright 2026 zeta4lab
+# Copyright 2026 제타포랩(zeta4lab)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
