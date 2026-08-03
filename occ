@@ -1,8 +1,23 @@
 #!/usr/bin/env bash
+#
+# Copyright 2026 zeta4lab
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
 # occ — Ollama Cloud 셸 래퍼
 #
 #   occ "한국의 수도는?"          프롬프트 (스트리밍)
-#   occ -m kimi-k3 "안녕"         모델 지정
+#   occ -m gpt-oss:120b "안녕"    모델 지정 (무료 모델은 README §2)
 #   occ -j "홍길동은 30살"        JSON 출력 유도
 #   occ ls                        모델 목록
 #   occ show gemma4:31b           모델 스펙
@@ -39,7 +54,10 @@ while [ $# -gt 0 ]; do
   case "$1" in
     -m) MODEL="$2"; shift 2 ;;
     -j) JSON_MODE=1; shift ;;
-    -h|--help) sed -n '2,10p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help)
+      # 라이선스 헤더는 건너뛰고 사용법 블록만 출력한다
+      sed -n '/^# occ —/,/^set -/p' "$0" | sed '$d' | sed 's/^#\( \)\?//'
+      exit 0 ;;
     *) break ;;
   esac
 done

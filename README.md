@@ -369,7 +369,13 @@ Model    : gemma4:31b / gpt-oss:120b / minimax-m3 ...
 
 ---
 
-## 10. 참고 링크
+## 10. 라이선스
+
+[Apache License 2.0](LICENSE) — Copyright 2026 zeta4lab
+
+---
+
+## 11. 참고 링크
 
 - 문서: https://docs.ollama.com/cloud
 - API 키 관리: https://ollama.com/settings/keys
