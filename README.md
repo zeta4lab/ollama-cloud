@@ -88,6 +88,32 @@ parameter_size : 32.7B
 quantization   : BF16
 ```
 
+### 사용량 한도 (rate limit)
+
+| 플랜 | 가격 | 사용량 | 동시 모델 |
+|---|---|---|:--:|
+| **Free** | $0 | 기준 ("light usage") | **1** |
+| Pro | $20/월 | Free의 **50배** | 3 |
+| Max | $100/월 | Pro의 5배 (신규 가입 중단) | 10 |
+| Team | $25/시트/월 (5시트~) | — | — |
+
+- **세션 한도는 5시간마다**, **주간 한도는 7일마다** 리셋됩니다.
+- 구체적인 요청 수·토큰 수는 **공개되지 않습니다.**
+
+**⚠️ 응답 헤더에 rate limit 정보가 없습니다.**
+`x-ratelimit-*`, `retry-after` 같은 표준 헤더를 제공하지 않으므로
+**남은 할당량을 프로그램으로 알 수 없습니다.** 한도 소진은 오류를 받고 나서야 알 수 있습니다.
+
+실측 결과:
+
+- 연속 20회 요청 → 전부 200, 429 없음
+- 동시 요청 5개 → 전부 200이지만 응답이 1.2s → 2.0s → 2.3s → 4.0s로 계단식 증가.
+  거부가 아니라 **큐잉으로 직렬화**됩니다 (동시 모델 1).
+- 서로 다른 모델 3개 동시 요청도 모두 200 — 모델 전환을 막지는 않습니다.
+
+병렬로 던져도 순차 처리되므로 배치 작업은 예상보다 오래 걸립니다.
+잔여량은 https://ollama.com/settings 에서 웹 로그인으로만 확인할 수 있습니다.
+
 ---
 
 ## 3. 엔드포인트 지원 현황
@@ -283,6 +309,41 @@ oc.tool_calls(r)   # [{'call_id': ..., 'name': 'get_weather', 'arguments': {'cit
 
 oc.models()        # 18개 (구독 전용 포함)
 oc.show()          # 모델 스펙
+```
+
+#### 자동 재시도
+
+한도 소진을 미리 감지할 방법이 없으므로(§2 참고) 재시도가 기본 내장돼 있습니다.
+
+```python
+oc = OllamaCloud(
+    max_retries=5,      # 재시도 횟수 (기본 5)
+    backoff_base=1.0,   # 지수 백오프 기준 (초)
+    backoff_cap=60.0,   # 최대 대기 (초)
+    verbose=True,       # 재시도 로그를 stderr 로
+)
+```
+
+| 상황 | 동작 |
+|---|---|
+| `429`, `408`, `5xx` | 지수 백오프 + 지터로 재시도. `Retry-After` 헤더가 있으면 우선 존중 |
+| 네트워크 오류 / 타임아웃 | 동일하게 재시도 |
+| `403` 구독 필요 | **재시도 안 함** — 영구 실패이므로 즉시 `SubscriptionRequiredError` |
+| 재시도 소진 (429) | `RateLimitError` |
+
+지터를 넣어 동시 재시도가 한 시점에 몰리지 않게 분산합니다.
+
+```python
+from ollama_cloud import SubscriptionRequiredError, RateLimitError, OllamaCloudError
+
+try:
+    oc.chat("안녕")
+except SubscriptionRequiredError as e:
+    ...   # 무료 모델로 대체
+except RateLimitError:
+    ...   # 5시간 뒤 재시도 등
+except OllamaCloudError:
+    ...   # 그 외
 ```
 
 단독 실행도 됩니다:

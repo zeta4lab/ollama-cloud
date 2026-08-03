@@ -17,6 +17,10 @@ from __future__ import annotations
 
 import json
 import os
+import random
+import socket
+import sys
+import time
 import urllib.error
 import urllib.request
 from typing import Any, Iterator
@@ -24,9 +28,20 @@ from typing import Any, Iterator
 BASE_URL = "https://ollama.com"
 DEFAULT_MODEL = "gemma4:31b"
 
+# 재시도해도 의미가 있는 상태 코드. 403(구독 필요)은 영구 실패이므로 제외한다.
+RETRYABLE_STATUS = frozenset({408, 429, 500, 502, 503, 504})
+
 
 class OllamaCloudError(RuntimeError):
-    pass
+    """일반 오류."""
+
+
+class SubscriptionRequiredError(OllamaCloudError):
+    """유료 구독이 필요한 모델을 호출했을 때. 재시도해도 해결되지 않는다."""
+
+
+class RateLimitError(OllamaCloudError):
+    """재시도를 모두 소진하고도 한도에 걸린 경우."""
 
 
 class OllamaCloud:
@@ -36,6 +51,10 @@ class OllamaCloud:
         model: str = DEFAULT_MODEL,
         base_url: str = BASE_URL,
         timeout: float = 120.0,
+        max_retries: int = 5,
+        backoff_base: float = 1.0,
+        backoff_cap: float = 60.0,
+        verbose: bool = False,
     ) -> None:
         self.api_key = api_key or os.environ.get("OLLAMA_API_KEY", "")
         if not self.api_key:
@@ -45,24 +64,84 @@ class OllamaCloud:
         self.model = model
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
+        self.max_retries = max_retries
+        self.backoff_base = backoff_base
+        self.backoff_cap = backoff_cap
+        self.verbose = verbose
+
+    # -------------------------------------------------------------- 재시도
+
+    def _sleep_for(self, attempt: int, retry_after: str | None) -> float:
+        """Retry-After 헤더를 우선 존중하고, 없으면 지수 백오프 + 지터."""
+        if retry_after:
+            try:
+                return min(float(retry_after), self.backoff_cap)
+            except ValueError:
+                pass  # HTTP-date 형식은 무시하고 백오프로 넘어간다
+        delay = min(self.backoff_base * (2**attempt), self.backoff_cap)
+        return delay * (0.5 + random.random() / 2)  # 지터로 동시 재시도 분산
+
+    def _log(self, msg: str) -> None:
+        if self.verbose:
+            print(f"[ollama_cloud] {msg}", file=sys.stderr)
 
     # ------------------------------------------------------------------ 내부
 
     def _request(self, path: str, payload: dict[str, Any] | None, method: str = "POST"):
+        """요청을 보내고 응답 객체를 돌려준다. 429/5xx/네트워크 오류는 재시도한다.
+
+        403(구독 필요)은 재시도해도 영구히 실패하므로 즉시 예외를 던진다.
+        """
         body = json.dumps(payload).encode() if payload is not None else None
-        req = urllib.request.Request(
-            f"{self.base_url}{path}",
-            data=body,
-            method=method,
-            headers={
-                "Authorization": f"Bearer {self.api_key}",
-                "Content-Type": "application/json",
-            },
-        )
-        try:
-            return urllib.request.urlopen(req, timeout=self.timeout)
-        except urllib.error.HTTPError as e:
-            raise OllamaCloudError(f"HTTP {e.code}: {e.read().decode()[:300]}") from e
+        url = f"{self.base_url}{path}"
+        last_error: Exception | None = None
+
+        for attempt in range(self.max_retries + 1):
+            req = urllib.request.Request(
+                url,
+                data=body,
+                method=method,
+                headers={
+                    "Authorization": f"Bearer {self.api_key}",
+                    "Content-Type": "application/json",
+                },
+            )
+            try:
+                return urllib.request.urlopen(req, timeout=self.timeout)
+
+            except urllib.error.HTTPError as e:
+                detail = e.read().decode(errors="replace")[:300]
+
+                if e.code == 403 and "subscription" in detail:
+                    raise SubscriptionRequiredError(
+                        f"'{(payload or {}).get('model', '?')}' 는 유료 구독이 필요합니다. "
+                        f"무료 모델 목록은 README 참고. (HTTP 403)"
+                    ) from e
+
+                if e.code not in RETRYABLE_STATUS or attempt == self.max_retries:
+                    err = RateLimitError if e.code == 429 else OllamaCloudError
+                    raise err(f"HTTP {e.code}: {detail}") from e
+
+                wait = self._sleep_for(attempt, e.headers.get("Retry-After"))
+                self._log(
+                    f"HTTP {e.code} — {wait:.1f}초 후 재시도 "
+                    f"({attempt + 1}/{self.max_retries})"
+                )
+                last_error = e
+                time.sleep(wait)
+
+            except (urllib.error.URLError, socket.timeout, TimeoutError) as e:
+                if attempt == self.max_retries:
+                    raise OllamaCloudError(f"네트워크 오류: {e}") from e
+                wait = self._sleep_for(attempt, None)
+                self._log(
+                    f"네트워크 오류 ({e}) — {wait:.1f}초 후 재시도 "
+                    f"({attempt + 1}/{self.max_retries})"
+                )
+                last_error = e
+                time.sleep(wait)
+
+        raise OllamaCloudError(f"재시도 소진: {last_error}")  # 도달하지 않음
 
     def _post_json(self, path: str, payload: dict[str, Any]) -> dict[str, Any]:
         with self._request(path, payload) as resp:
