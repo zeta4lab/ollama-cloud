@@ -43,6 +43,8 @@ CLI 없이 HTTP API만 쓸 거라면 불필요합니다.
 스펙은 `/api/show` 로 조회한 값이며, 접근 가능 여부는 각 모델에
 실제 요청을 보내 확인했습니다.
 
+> 📖 모델별 상세 소개·제조사·용도별 추천은 **[docs/models.md](docs/models.md)** 참고
+
 ### ✅ 무료 (7개)
 
 | 모델 | 파라미터 | 컨텍스트 | 기능 |
@@ -381,6 +383,12 @@ Copyright 2026 **제타포랩(zeta4lab)**
 ---
 
 ## 11. 참고 링크
+
+### 이 저장소
+
+- [docs/models.md](docs/models.md) — 18개 모델 상세 소개 (제조사·스펙·용도별 추천)
+
+### 외부
 
 - 문서: https://docs.ollama.com/cloud
 - API 키 관리: https://ollama.com/settings/keys
